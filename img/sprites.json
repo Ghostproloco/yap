@@ -1,0 +1,14 @@
+{
+  "meta": {
+    "generated": true,
+    "note": "Atlas generado en runtime si falta el PNG"
+  },
+  "frames": {
+    "food": { "x": 0, "y": 0, "w": 80, "h": 80 },
+    "electronics": { "x": 80, "y": 0, "w": 80, "h": 80 },
+    "clothes": { "x": 160, "y": 0, "w": 80, "h": 80 },
+    "cleaning": { "x": 240, "y": 0, "w": 80, "h": 80 },
+    "toys": { "x": 320, "y": 0, "w": 80, "h": 80 },
+    "office": { "x": 400, "y": 0, "w": 80, "h": 80 }
+  }
+}

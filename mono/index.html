@@ -1,0 +1,1832 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Mega Sort Mania - Monolítico</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg-main: #f2f5ff;
+      --bg-panel: rgba(255,255,255,0.85);
+      --bg-panel-contrast: #111;
+      --accent: #4a7bff;
+      --accent-2: #ff7b4a;
+      --danger: #ff4a6a;
+      --success: #44c767;
+      --text-main: #1f2333;
+      --text-contrast: #fafafa;
+      --shadow: 0 10px 30px rgba(31,35,51,0.2);
+      --ui-scale: 1;
+      font-size: calc(16px * var(--ui-scale));
+    }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", Roboto, system-ui, sans-serif;
+      background: var(--bg-main);
+      color: var(--text-main);
+      overflow: hidden;
+    }
+    body.high-contrast {
+      --bg-main: #050505;
+      --bg-panel: rgba(0,0,0,0.9);
+      --bg-panel-contrast: #f9f9f9;
+      --accent: #ffd400;
+      --accent-2: #08f;
+      --text-main: #fefefe;
+      --text-contrast: #000;
+      --shadow: 0 0 0 2px #fff;
+    }
+    #game-root {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+      background: linear-gradient(180deg, rgba(74,123,255,0.2), rgba(255,255,255,0.5));
+    }
+    canvas#game-canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      image-rendering: pixelated;
+    }
+    .ui-layer {
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      pointer-events: none;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 1.2rem;
+    }
+    .hud {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 0.8rem;
+      pointer-events: auto;
+    }
+    .hud-panel {
+      background: var(--bg-panel);
+      border-radius: 16px;
+      padding: 0.8rem 1rem;
+      min-width: 180px;
+      box-shadow: var(--shadow);
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      transition: transform 0.3s ease;
+    }
+    .hud-panel[data-pop="true"] {
+      transform: scale(1.05);
+    }
+    .hud-panel strong { font-size: 1.1rem; }
+    .btn {
+      pointer-events: auto;
+      background: var(--accent);
+      color: var(--text-contrast);
+      padding: 0.9rem 1.2rem;
+      border-radius: 16px;
+      font-size: 1.1rem;
+      font-weight: 600;
+      border: none;
+      cursor: pointer;
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+      box-shadow: var(--shadow);
+    }
+    .btn:focus-visible { outline: 3px solid rgba(255,255,255,0.7); outline-offset: 4px; }
+    .btn:active { transform: scale(0.96); }
+    .btn.secondary { background: var(--accent-2); }
+    .btn.danger { background: var(--danger); }
+    .btn.ghost {
+      background: transparent;
+      color: var(--text-main);
+      box-shadow: none;
+      border: 2px solid currentColor;
+    }
+    .centered-panel {
+      pointer-events: auto;
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      background: var(--bg-panel);
+      padding: 2rem;
+      border-radius: 20px;
+      box-shadow: var(--shadow);
+      width: min(90vw, 480px);
+      max-height: 90vh;
+      overflow-y: auto;
+    }
+    .scene-title {
+      font-size: 2rem;
+      margin-bottom: 1.2rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .grid-levels {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+      gap: 0.8rem;
+    }
+    .level-card {
+      background: rgba(74,123,255,0.15);
+      border-radius: 16px;
+      padding: 0.8rem;
+      text-align: center;
+      font-weight: 600;
+      cursor: pointer;
+      border: 2px solid transparent;
+    }
+    .level-card.locked { opacity: 0.4; pointer-events: none; }
+    .news-ticker {
+      pointer-events: auto;
+      width: 100%;
+      overflow: hidden;
+      background: rgba(0,0,0,0.12);
+      color: var(--text-main);
+      border-radius: 12px;
+      padding: 0.6rem 1rem;
+      margin-top: 1rem;
+      font-size: 0.95rem;
+      position: relative;
+    }
+    .news-ticker span {
+      position: absolute;
+      white-space: nowrap;
+      will-change: transform;
+      animation: ticker 12s linear infinite;
+    }
+    @keyframes ticker {
+      from { transform: translateX(100%); }
+      to { transform: translateX(-120%); }
+    }
+    .toast-container {
+      position: absolute;
+      bottom: 1rem;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      pointer-events: none;
+    }
+    .toast {
+      background: rgba(34,34,34,0.85);
+      color: white;
+      padding: 0.6rem 0.9rem;
+      border-radius: 12px;
+      min-width: 220px;
+      text-align: center;
+      box-shadow: var(--shadow);
+      opacity: 0;
+      animation: toast-in 0.3s ease forwards, toast-out 0.3s ease forwards 2.7s;
+    }
+    @keyframes toast-in { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes toast-out { to { opacity: 0; transform: translateY(-20px); } }
+    .modal-bg {
+      pointer-events: auto;
+      position: absolute;
+      inset: 0;
+      background: rgba(15, 18, 30, 0.6);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .flex-col { display: flex; flex-direction: column; gap: 0.8rem; }
+    .list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.6rem;
+    }
+    .achievement {
+      background: rgba(255,255,255,0.25);
+      border-radius: 12px;
+      padding: 0.8rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .store-item {
+      background: rgba(0,0,0,0.08);
+      padding: 1rem;
+      border-radius: 12px;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 0.6rem;
+      align-items: center;
+    }
+    .settings-group {
+      display: grid;
+      gap: 0.6rem;
+    }
+    label.switch {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.8rem;
+      font-weight: 600;
+    }
+    label.switch input { accent-color: var(--accent); }
+    .slider {
+      width: 100%;
+    }
+    .parallax-layer {
+      position: absolute;
+      inset: 0;
+      background-repeat: repeat;
+      background-size: cover;
+      opacity: 0.35;
+      pointer-events: none;
+      transition: opacity 0.3s ease;
+    }
+    [data-hidden="true"] { display: none !important; }
+  </style>
+</head>
+<body>
+<div id="game-root" aria-live="polite">
+  <div class="parallax-layer" id="parallax-back"></div>
+  <div class="parallax-layer" id="parallax-mid"></div>
+  <canvas id="game-canvas" width="1280" height="720" role="application" aria-label="Zona de juego Mega Sort Mania"></canvas>
+  <div class="ui-layer" id="ui-layer" aria-hidden="true"></div>
+  <div class="toast-container" id="toast-container" aria-live="assertive"></div>
+</div>
+<script>
+(() => {
+  "use strict";
+  const clamp = (v,min,max)=>Math.max(min,Math.min(max,v));
+  const lerp = (a,b,t)=>a+(b-a)*t;
+  const easeOutBack = (t)=>{const s=1.70158;return 1+--t*t*((s+1)*t+s);};
+  const randRange=(rng,min,max)=>rng()* (max-min)+min;
+  const categories = [
+    { id: 'food', color: '#ffb347', icon: '🍎', label: { es: 'Comida', en: 'Food' } },
+    { id: 'electronics', color: '#69a7ff', icon: '🔌', label: { es: 'Electrónica', en: 'Electronics' } },
+    { id: 'clothes', color: '#ff69c7', icon: '👕', label: { es: 'Ropa', en: 'Clothes' } },
+    { id: 'cleaning', color: '#8ae6ff', icon: '🧼', label: { es: 'Limpieza', en: 'Cleaning' } },
+    { id: 'toys', color: '#ffd86b', icon: '🧸', label: { es: 'Juguetes', en: 'Toys' } },
+    { id: 'office', color: '#b3ff82', icon: '📎', label: { es: 'Oficina', en: 'Office' } }
+  ];
+
+  const powerUps = {
+    freeze: { icon: '❄️', duration: 3000 },
+    magnet: { icon: '🧲', duration: 2000 },
+    sweep: { icon: '🧹', duration: 0 }
+  };
+
+  const defaultSave = () => ({
+    version: 1,
+    progress: { levels: {} },
+    infinite: { bestScore: 0, maxCombo: 0, maxSpeed: 1 },
+    settings: {
+      lang: navigator.language.startsWith('es') ? 'es' : 'en',
+      music: 0.6,
+      sfx: 0.8,
+      vibration: 'vibrate' in navigator,
+      colorBlind: 'none',
+      highContrast: false,
+      reduceMotion: false,
+      uiScale: 1
+    },
+    inventory: {
+      coins: 500,
+      skins: {
+        glove: ['classic'],
+        belt: ['standard'],
+        background: ['warehouse']
+      },
+      equipped: { glove: 'classic', belt: 'standard', background: 'warehouse' }
+    },
+    achievements: {},
+    daily: { date: '', challenges: [] },
+    seeds: {}
+  });
+
+  class Save {
+    constructor() {
+      this.key = 'mega-sort-save';
+      this.state = defaultSave();
+      this.load();
+    }
+    load() {
+      try {
+        const raw = localStorage.getItem(this.key);
+        if (raw) {
+          const data = JSON.parse(raw);
+          this.state = Object.assign(defaultSave(), data);
+        }
+      } catch (err) {
+        console.warn('Save load failed', err);
+      }
+    }
+    save() {
+      try {
+        localStorage.setItem(this.key, JSON.stringify(this.state));
+      } catch (err) {
+        console.warn('Save write failed', err);
+      }
+    }
+    reset() {
+      this.state = defaultSave();
+      this.save();
+    }
+    export() { return JSON.stringify(this.state, null, 2); }
+    import(json) {
+      try {
+        const data = JSON.parse(json);
+        if (data && data.version) {
+          this.state = Object.assign(defaultSave(), data);
+          this.save();
+          return true;
+        }
+      } catch (err) {
+        console.warn('Import failed', err);
+      }
+      return false;
+    }
+  }
+
+  const I18n = {
+    lang: 'es',
+    dict: {
+      es: {
+        'ui.play': 'Jugar',
+        'ui.infinite': 'Modo Infinito',
+        'ui.levels': 'Niveles',
+        'ui.store': 'Tienda',
+        'ui.achievements': 'Logros',
+        'ui.settings': 'Ajustes',
+        'ui.credits': 'Créditos',
+        'ui.resume': 'Continuar',
+        'ui.restart': 'Reiniciar',
+        'ui.quit': 'Salir',
+        'ui.tutorial': 'Tutorial',
+        'ui.pause': 'Pausa',
+        'ui.results': 'Resultados',
+        'stat.score': 'Puntuación',
+        'stat.combo': 'Combo',
+        'stat.time': 'Tiempo',
+        'stat.accuracy': 'Precisión',
+        'stat.stars': 'Estrellas',
+        'settings.language': 'Idioma',
+        'settings.music': 'Música',
+        'settings.sfx': 'FX',
+        'settings.vibration': 'Vibración',
+        'settings.colorblind': 'Modo daltónicos',
+        'settings.contrast': 'Alto contraste',
+        'settings.reduceMotion': 'Reducir movimiento',
+        'settings.uiScale': 'Tamaño UI',
+        'store.buy': 'Comprar',
+        'store.equip': 'Equipar',
+        'store.equipped': 'Equipado',
+        'ach.unlocked': 'Logro desbloqueado!',
+        'daily.challenges': 'Retos diarios',
+        'daily.resetIn': 'Reinicio en'
+      },
+      en: {
+        'ui.play': 'Play',
+        'ui.infinite': 'Endless Mode',
+        'ui.levels': 'Levels',
+        'ui.store': 'Store',
+        'ui.achievements': 'Achievements',
+        'ui.settings': 'Settings',
+        'ui.credits': 'Credits',
+        'ui.resume': 'Resume',
+        'ui.restart': 'Restart',
+        'ui.quit': 'Quit',
+        'ui.tutorial': 'Tutorial',
+        'ui.pause': 'Pause',
+        'ui.results': 'Results',
+        'stat.score': 'Score',
+        'stat.combo': 'Combo',
+        'stat.time': 'Time',
+        'stat.accuracy': 'Accuracy',
+        'stat.stars': 'Stars',
+        'settings.language': 'Language',
+        'settings.music': 'Music',
+        'settings.sfx': 'SFX',
+        'settings.vibration': 'Vibration',
+        'settings.colorblind': 'Colorblind Mode',
+        'settings.contrast': 'High Contrast',
+        'settings.reduceMotion': 'Reduce Motion',
+        'settings.uiScale': 'UI Size',
+        'store.buy': 'Buy',
+        'store.equip': 'Equip',
+        'store.equipped': 'Equipped',
+        'ach.unlocked': 'Achievement unlocked!',
+        'daily.challenges': 'Daily Challenges',
+        'daily.resetIn': 'Reset in'
+      }
+    },
+    t(key) {
+      const lang = this.lang || 'es';
+      return (this.dict[lang] && this.dict[lang][key]) || this.dict.es[key] || key;
+    },
+    setLang(lang) {
+      this.lang = lang;
+    }
+  };
+
+  class AudioManager {
+    constructor(save) {
+      this.save = save;
+      this.ctx = null;
+      this.musicGain = null;
+      this.fxGain = null;
+      this.currentMusic = null;
+      this.musicLoopBuffer = null;
+    }
+    ensureContext() {
+      if (!this.ctx) {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        this.ctx = ctx;
+        this.musicGain = ctx.createGain();
+        this.fxGain = ctx.createGain();
+        this.musicGain.connect(ctx.destination);
+        this.fxGain.connect(ctx.destination);
+        this.setMusicVolume(this.save.state.settings.music);
+        this.setFxVolume(this.save.state.settings.sfx);
+        this.createMusicLoop();
+      }
+    }
+    setMusicVolume(v) {
+      if (this.musicGain) this.musicGain.gain.value = v;
+    }
+    setFxVolume(v) {
+      if (this.fxGain) this.fxGain.gain.value = v;
+    }
+    playMusic() {
+      this.ensureContext();
+      if (!this.musicLoopBuffer) return;
+      if (this.currentMusic) return;
+      const src = this.ctx.createBufferSource();
+      src.buffer = this.musicLoopBuffer;
+      src.loop = true;
+      src.connect(this.musicGain);
+      src.start();
+      this.currentMusic = src;
+    }
+    stopMusic() {
+      if (this.currentMusic) {
+        this.currentMusic.stop();
+        this.currentMusic = null;
+      }
+    }
+    playSfx(type) {
+      this.ensureContext();
+      if (!this.ctx) return;
+      const ctx = this.ctx;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      const now = ctx.currentTime;
+      let freq = 440;
+      switch (type) {
+        case 'ok': freq = 720; break;
+        case 'error': freq = 140; break;
+        case 'combo': freq = 920; break;
+        case 'powerup': freq = 560; break;
+      }
+      osc.frequency.setValueAtTime(freq, now);
+      if (type === 'combo') {
+        osc.frequency.linearRampToValueAtTime(freq*1.5, now+0.12);
+      }
+      gain.gain.setValueAtTime(0.001, now);
+      gain.gain.exponentialRampToValueAtTime(0.3, now+0.01);
+      gain.gain.exponentialRampToValueAtTime(0.001, now+0.25);
+      osc.type = type === 'error' ? 'sawtooth' : 'triangle';
+      osc.connect(gain);
+      gain.connect(this.fxGain);
+      osc.start();
+      osc.stop(now+0.3);
+    }
+    createMusicLoop() {
+      this.ensureContext();
+      const ctx = this.ctx;
+      const bpm = 80;
+      const beat = 60 / bpm;
+      const bars = 8;
+      const duration = beat * 4 * bars;
+      const sampleRate = ctx.sampleRate;
+      const buffer = ctx.createBuffer(2, duration*sampleRate, sampleRate);
+      for (let ch=0; ch<2; ch++) {
+        const data = buffer.getChannelData(ch);
+        for (let i=0; i<data.length; i++) {
+          const t = i / sampleRate;
+          const kickPhase = (t % beat) / beat;
+          const kick = Math.pow(1 - kickPhase, 4) * 0.5;
+          const bassFreq = 55;
+          const bass = Math.sin(2*Math.PI*bassFreq*t) * 0.15;
+          const pluckFreq = [220,330,440,330][Math.floor(t/(beat/2))%4];
+          const pluckEnv = Math.max(0,1-((t%(beat/2))/(beat/2)));
+          const pluck = Math.sin(2*Math.PI*pluckFreq*t) * pluckEnv * 0.15;
+          data[i] = kick + bass + pluck;
+        }
+      }
+      this.musicLoopBuffer = buffer;
+    }
+  }
+
+  class ParticleSystem {
+    constructor() {
+      this.particles = [];
+      this.pool = [];
+    }
+    spawn(type, x, y, color) {
+      for (let i=0;i<18;i++) {
+        const p = this.pool.pop() || {};
+        p.x = x;
+        p.y = y;
+        p.vx = randRange(Math.random, -2, 2);
+        p.vy = randRange(Math.random, -3, -1);
+        p.life = 0;
+        p.maxLife = 500 + Math.random()*300;
+        p.type = type;
+        p.color = color || '#fff';
+        this.particles.push(p);
+      }
+    }
+    update(dt) {
+      for (let i=this.particles.length-1;i>=0;i--) {
+        const p = this.particles[i];
+        p.life += dt;
+        p.x += p.vx * dt/16;
+        p.y += p.vy * dt/16;
+        p.vy += 0.01 * dt;
+        if (p.life >= p.maxLife) {
+          this.pool.push(p);
+          this.particles.splice(i,1);
+        }
+      }
+    }
+    render(ctx) {
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      for (const p of this.particles) {
+        ctx.globalAlpha = 1 - (p.life/p.maxLife);
+        ctx.fillStyle = p.color;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 4, 0, Math.PI*2);
+        ctx.fill();
+      }
+      ctx.restore();
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  class Input {
+    constructor(canvas) {
+      this.canvas = canvas;
+      this.activePointer = null;
+      this.onDown = null;
+      this.onMove = null;
+      this.onUp = null;
+      this.flickThreshold = 0.55;
+      canvas.addEventListener('pointerdown', this.handleDown.bind(this));
+      window.addEventListener('pointermove', this.handleMove.bind(this));
+      window.addEventListener('pointerup', this.handleUp.bind(this));
+    }
+    normalize(ev) {
+      const rect = this.canvas.getBoundingClientRect();
+      const scaleX = this.canvas.width / rect.width;
+      const scaleY = this.canvas.height / rect.height;
+      return {
+        id: ev.pointerId,
+        x: (ev.clientX - rect.left) * scaleX,
+        y: (ev.clientY - rect.top) * scaleY,
+        originalEvent: ev
+      };
+    }
+    handleDown(ev) {
+      const p = this.normalize(ev);
+      this.activePointer = { ...p, history: [{ x: p.x, y: p.y, t: performance.now() }] };
+      this.onDown && this.onDown(p);
+    }
+    handleMove(ev) {
+      if (!this.activePointer) return;
+      const p = this.normalize(ev);
+      this.activePointer.history.push({ x: p.x, y: p.y, t: performance.now() });
+      this.activePointer.x = p.x;
+      this.activePointer.y = p.y;
+      this.onMove && this.onMove(p);
+    }
+    handleUp(ev) {
+      if (!this.activePointer) return;
+      const history = this.activePointer.history;
+      const last = history[history.length-1];
+      const first = history[0];
+      const dt = Math.max(16, last.t - first.t);
+      const speed = Math.hypot(last.x-first.x, last.y-first.y) / dt;
+      const flick = speed > this.flickThreshold;
+      const p = this.normalize(ev);
+      this.onUp && this.onUp({ ...p, flick, vx: flick ? (last.x-first.x)/dt*16 : 0, vy: flick ? (last.y-first.y)/dt*16 : 0 });
+      this.activePointer = null;
+    }
+  }
+
+  class SeededRandom {
+    constructor(seed=1) {
+      this.seed = seed;
+    }
+    next() {
+      this.seed |= 0;
+      this.seed = (this.seed + 0x6D2B79F5) | 0;
+      let t = Math.imul(this.seed ^ this.seed >>> 15, 1 | this.seed);
+      t = (t + Math.imul(t ^ t >>> 7, 61 | t)) ^ t;
+      return ((t ^ t >>> 14) >>> 0) / 4294967296;
+    }
+  }
+
+  class AILevelDirector {
+    constructor(seed, save, prefs) {
+      this.rng = new SeededRandom(seed || Math.floor(Math.random()*2**32));
+      this.save = save;
+      this.prefs = prefs;
+      this.skillRating = 1200;
+      this.recentErrors = 0;
+    }
+    seededRandom() { return this.rng.next(); }
+    adjustAfterOutcome(outcome) {
+      const perf = outcome.accuracy * 0.6 + (1-outcome.pace) * 0.4;
+      if (outcome.errors > 2) {
+        this.recentErrors += outcome.errors;
+      } else {
+        this.recentErrors = Math.max(0, this.recentErrors-1);
+      }
+      this.skillRating = clamp(this.skillRating + (perf - 0.5) * 40, 800, 2000);
+    }
+    baseDifficulty(level, mode) {
+      const skillFactor = (this.skillRating - 800) / 1200;
+      if (mode === 'infinite') {
+        return 0.4 + Math.log(level+1)/4 + skillFactor*0.5;
+      }
+      return 0.2 + level * 0.05 + skillFactor*0.3;
+    }
+    composeWavePlan({ level, mode, skillRating, screen }) {
+      const diff = clamp(this.baseDifficulty(level, mode) + (skillRating-1200)/1200, 0.2, 1.5);
+      const duration = clamp(18 - diff*6, 8, 18);
+      const beltSpeed = clamp(160 + diff*120, 140, 360);
+      const spawnRate = clamp(1.1 - diff*0.3, 0.35, 1.4);
+      const spawns = [];
+      let t = 0.8;
+      const rng = () => this.rng.next();
+      const catCount = Math.min(categories.length, 3 + Math.floor(diff*2));
+      const catPool = categories.slice(0).sort(()=>rng()-0.5).slice(0, catCount);
+      while (t < duration) {
+        const category = catPool[Math.floor(rng()*catPool.length)];
+        const tags = [];
+        if (rng() < 0.25+diff*0.1) tags.push(['fragil','liquido','pesado'][Math.floor(rng()*3)]);
+        const decoy = rng() < clamp(0.1 + diff*0.2, 0, 0.6);
+        const obstacles = [];
+        if (rng() < diff*0.3) obstacles.push('sealed');
+        if (rng() < diff*0.2) obstacles.push('dirty');
+        let powerupDrop = undefined;
+        if (rng() < clamp(0.05 + (0.6-diff)*0.15, 0.02, 0.3)) {
+          powerupDrop = ['freeze','magnet','sweep'][Math.floor(rng()*3)];
+        }
+        spawns.push({ t, category: category.id, tags, decoy, obstacles, powerupDrop });
+        t += spawnRate + rng()*spawnRate*0.25;
+      }
+      if (this.recentErrors > 3) {
+        spawns.push({ t: t+0.5, category: catPool[0].id, tags: [], decoy: false, obstacles: [], powerupDrop: 'freeze' });
+        this.recentErrors = 0;
+      }
+      return { duration, beltSpeed, spawns };
+    }
+    nextWave(context) {
+      const plan = this.composeWavePlan(context);
+      return plan;
+    }
+  }
+
+  class Conveyor {
+    constructor() {
+      this.speed = 180;
+      this.progress = 0;
+    }
+    update(dt) {
+      this.progress += this.speed * dt/1000;
+    }
+  }
+
+  class Item {
+    constructor(data, sprite) {
+      this.data = data;
+      this.sprite = sprite;
+      this.x = 0;
+      this.y = 0;
+      this.vx = 0;
+      this.vy = 0;
+      this.width = 80;
+      this.height = 80;
+      this.dragging = false;
+      this.state = 'belt';
+      this.opened = !data.obstacles.includes('sealed');
+      this.cleaned = !data.obstacles.includes('dirty');
+    }
+    update(dt) {
+      if (!this.dragging) {
+        this.x -= this.vx * dt/16;
+        this.y -= this.vy * dt/16;
+      }
+    }
+    render(ctx) {
+      ctx.save();
+      ctx.translate(this.x, this.y);
+      ctx.fillStyle = this.sprite.color;
+      ctx.strokeStyle = '#111';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.roundRect(-this.width/2, -this.height/2, this.width, this.height, 16);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = '#000';
+      ctx.font = '24px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(this.sprite.icon, 0, -4);
+      if (!this.opened) {
+        ctx.strokeStyle = '#fff';
+        ctx.setLineDash([6,6]);
+        ctx.strokeRect(-this.width/2+8, -this.height/2+8, this.width-16, this.height-16);
+        ctx.setLineDash([]);
+      }
+      if (!this.cleaned) {
+        ctx.fillStyle = 'rgba(80,80,80,0.4)';
+        ctx.beginPath();
+        ctx.arc(0,0,28,0,Math.PI*2);
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+  }
+
+  class Bin {
+    constructor(cfg) {
+      this.cfg = cfg;
+      this.x = 0;
+      this.y = 0;
+      this.width = 140;
+      this.height = 140;
+      this.active = true;
+      this.popTimer = 0;
+    }
+    contains(item) {
+      const overlapX = Math.max(0, Math.min(item.x + item.width/2, this.x + this.width/2) - Math.max(item.x - item.width/2, this.x - this.width/2));
+      const overlapY = Math.max(0, Math.min(item.y + item.height/2, this.y + this.height/2) - Math.max(item.y - item.height/2, this.y - this.height/2));
+      const area = overlapX * overlapY;
+      return area > (item.width*item.height*0.4);
+    }
+    render(ctx) {
+      ctx.save();
+      ctx.translate(this.x, this.y);
+      ctx.fillStyle = this.cfg.color;
+      ctx.globalAlpha = this.active ? 0.9 : 0.4;
+      ctx.beginPath();
+      ctx.roundRect(-this.width/2, -this.height/2, this.width, this.height, 24);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+      ctx.strokeStyle = '#222';
+      ctx.lineWidth = 4;
+      ctx.stroke();
+      ctx.font = '36px sans-serif';
+      ctx.fillStyle = '#111';
+      ctx.textAlign = 'center';
+      ctx.fillText(this.cfg.icon, 0, -18);
+      ctx.font = '18px sans-serif';
+      ctx.fillText(this.cfg.label[I18n.lang], 0, 44);
+      ctx.restore();
+    }
+  }
+
+  class PowerUp {
+    constructor(type) {
+      this.type = type;
+      this.active = false;
+      this.remaining = 0;
+    }
+    trigger(duration) {
+      this.active = true;
+      this.remaining = duration;
+    }
+    update(dt) {
+      if (this.active) {
+        this.remaining -= dt;
+        if (this.remaining <= 0) {
+          this.active = false;
+          this.remaining = 0;
+        }
+      }
+    }
+  }
+
+  class Spawner {
+    constructor(director) {
+      this.director = director;
+      this.currentPlan = null;
+      this.time = 0;
+      this.index = 0;
+    }
+    start(plan) {
+      this.currentPlan = plan;
+      this.time = 0;
+      this.index = 0;
+    }
+    update(dt, spawnCb) {
+      if (!this.currentPlan) return;
+      this.time += dt/1000;
+      const spawns = this.currentPlan.spawns;
+      while (this.index < spawns.length && this.time >= spawns[this.index].t) {
+        spawnCb(spawns[this.index]);
+        this.index++;
+      }
+    }
+    done() {
+      return this.currentPlan && this.time > this.currentPlan.duration;
+    }
+  }
+
+  class SceneManager {
+    constructor(game) {
+      this.game = game;
+      this.scenes = new Map();
+      this.current = null;
+      this.currentId = null;
+    }
+    add(id, scene) { this.scenes.set(id, scene); }
+    go(id, data) {
+      if (this.current && this.current.exit) this.current.exit();
+      this.currentId = id;
+      this.current = this.scenes.get(id);
+      if (this.current && this.current.enter) this.current.enter(data);
+    }
+    update(dt) { if (this.current && this.current.update) this.current.update(dt); }
+    render(ctx) { if (this.current && this.current.render) this.current.render(ctx); }
+  }
+
+  class UIManager {
+    constructor(root) {
+      this.root = root;
+    }
+    clear() { this.root.innerHTML = ''; }
+    setHidden(flag) { this.root.setAttribute('aria-hidden', flag ? 'true' : 'false'); }
+    showSplash(onDone) {
+      this.clear();
+      this.setHidden(false);
+      const panel = document.createElement('div');
+      panel.className = 'centered-panel';
+      panel.innerHTML = `<div class="scene-title">Mega Sort Mania</div><p>Preparando cinta transportadora...</p>`;
+      this.root.append(panel);
+      setTimeout(() => onDone && onDone(), 1000);
+    }
+    showHome(game) {
+      this.clear();
+      this.setHidden(false);
+      const panel = document.createElement('div');
+      panel.className = 'centered-panel flex-col';
+      const logo = document.createElement('div');
+      logo.className = 'scene-title';
+      logo.innerHTML = `<span style="font-size:3rem">🧠</span><span>Mega Sort Mania</span>`;
+      panel.append(logo);
+      const buttons = [
+        { id: 'tutorial', label: I18n.t('ui.tutorial') },
+        { id: 'levels', label: I18n.t('ui.levels') },
+        { id: 'infinite', label: I18n.t('ui.infinite') },
+        { id: 'store', label: I18n.t('ui.store') },
+        { id: 'achievements', label: I18n.t('ui.achievements') },
+        { id: 'settings', label: I18n.t('ui.settings') },
+        { id: 'credits', label: I18n.t('ui.credits') }
+      ];
+      buttons.forEach(btn => {
+        const el = document.createElement('button');
+        el.className = 'btn';
+        el.textContent = btn.label;
+        el.addEventListener('click', () => game.handleMainMenu(btn.id));
+        panel.append(el);
+      });
+      const news = document.createElement('div');
+      news.className = 'news-ticker';
+      const span = document.createElement('span');
+      span.textContent = 'Noticias: ¡Nuevos guantes neon disponibles! | Torneo semanal comienza mañana | Ajusta el tamaño de UI en Ajustes';
+      news.append(span);
+      panel.append(news);
+      this.root.append(panel);
+    }
+    showLevels(game) {
+      this.clear();
+      const panel = document.createElement('div');
+      panel.className = 'centered-panel flex-col';
+      panel.innerHTML = `<div class="scene-title">${I18n.t('ui.levels')}</div>`;
+      const grid = document.createElement('div');
+      grid.className = 'grid-levels';
+      for (let i=1;i<=100;i++) {
+        const levelBtn = document.createElement('button');
+        levelBtn.className = 'level-card';
+        const progress = game.save.state.progress.levels[i];
+        const stars = progress ? '★'.repeat(progress.stars||0).padEnd(3,'☆') : '☆☆☆';
+        levelBtn.innerHTML = `<div>Lv ${i}</div><div>${stars}</div>`;
+        const locked = !progress && i>1 && !game.save.state.progress.levels[i-1];
+        if (locked) levelBtn.classList.add('locked');
+        levelBtn.addEventListener('click', ()=> game.startLevel(i));
+        grid.append(levelBtn);
+      }
+      panel.append(grid);
+      const back = document.createElement('button');
+      back.className='btn ghost';
+      back.textContent='←';
+      back.addEventListener('click',()=>game.sceneManager.go('home'));
+      panel.append(back);
+      this.root.append(panel);
+    }
+    showInfinite(game) {
+      this.clear();
+      const panel = document.createElement('div');
+      panel.className = 'centered-panel flex-col';
+      const info = game.save.state.infinite;
+      panel.innerHTML = `<div class="scene-title">${I18n.t('ui.infinite')}</div>
+      <div class="list">
+        <div>${I18n.t('stat.score')}: ${info.bestScore}</div>
+        <div>${I18n.t('stat.combo')}: ${info.maxCombo}</div>
+        <div>Top Speed: ${info.maxSpeed.toFixed(1)}</div>
+      </div>`;
+      const play = document.createElement('button');
+      play.className='btn';
+      play.textContent = I18n.t('ui.play');
+      play.addEventListener('click',()=>game.startInfinite());
+      panel.append(play);
+      const back = document.createElement('button');
+      back.className='btn ghost';
+      back.textContent='←';
+      back.addEventListener('click',()=>game.sceneManager.go('home'));
+      panel.append(back);
+      this.root.append(panel);
+    }
+    showStore(game) {
+      this.clear();
+      const panel = document.createElement('div');
+      panel.className = 'centered-panel flex-col';
+      panel.innerHTML = `<div class="scene-title">${I18n.t('ui.store')}</div><div>Monedas: ${game.save.state.inventory.coins}</div>`;
+      const list = document.createElement('div');
+      list.className = 'list';
+      const items = [
+        { id: 'glove_neon', type:'glove', name: 'Guante Neón', price: 200 },
+        { id: 'belt_carbon', type:'belt', name: 'Cinta Carbón', price: 300 },
+        { id: 'background_city', type:'background', name: 'Fondo Ciudad', price: 250 }
+      ];
+      items.forEach(item => {
+        const owned = game.save.state.inventory.skins[item.type]?.includes(item.id.split('_')[1]);
+        const equipped = game.save.state.inventory.equipped[item.type] === item.id.split('_')[1];
+        const row = document.createElement('div');
+        row.className='store-item';
+        const label = document.createElement('div');
+        label.innerHTML=`<strong>${item.name}</strong><div>${item.price} monedas</div>`;
+        const btn = document.createElement('button');
+        btn.className='btn secondary';
+        if (owned) {
+          btn.textContent = equipped ? I18n.t('store.equipped') : I18n.t('store.equip');
+          btn.disabled = equipped;
+        } else {
+          btn.textContent = I18n.t('store.buy');
+        }
+        btn.addEventListener('click',()=>game.handleStore(item));
+        row.append(label, btn);
+        list.append(row);
+      });
+      panel.append(list);
+      const back = document.createElement('button');
+      back.className='btn ghost';
+      back.textContent='←';
+      back.addEventListener('click',()=>game.sceneManager.go('home'));
+      panel.append(back);
+      this.root.append(panel);
+    }
+    showAchievements(game) {
+      this.clear();
+      const panel = document.createElement('div');
+      panel.className='centered-panel flex-col';
+      panel.innerHTML = `<div class="scene-title">${I18n.t('ui.achievements')}</div>`;
+      const list = document.createElement('div');
+      list.className='list';
+      const achDefs = [
+        { id: 'manitas', name: 'Manitas', desc: '10 aciertos seguidos' },
+        { id: 'relampago', name: 'Relámpago', desc: 'Combo x5' },
+        { id: 'zen', name: 'Zen', desc: 'Nivel sin errores' },
+        { id: 'coleccionista', name: 'Coleccionista', desc: '5 skins únicas' }
+      ];
+      achDefs.forEach(ach => {
+        const unlocked = !!game.save.state.achievements[ach.id];
+        const el = document.createElement('div');
+        el.className='achievement';
+        el.innerHTML=`<div><strong>${ach.name}</strong><div>${ach.desc}</div></div><div>${unlocked? '✅':'🔒'}</div>`;
+        list.append(el);
+      });
+      panel.append(list);
+      const back = document.createElement('button');
+      back.className='btn ghost';
+      back.textContent='←';
+      back.addEventListener('click',()=>game.sceneManager.go('home'));
+      panel.append(back);
+      this.root.append(panel);
+    }
+    showSettings(game) {
+      this.clear();
+      const panel = document.createElement('div');
+      panel.className='centered-panel flex-col';
+      panel.innerHTML = `<div class="scene-title">${I18n.t('ui.settings')}</div>`;
+      const group = document.createElement('div');
+      group.className='settings-group';
+
+      const langLabel = document.createElement('label');
+      langLabel.textContent = I18n.t('settings.language');
+      const select = document.createElement('select');
+      select.innerHTML = `<option value="es">Español</option><option value="en">English</option>`;
+      select.value = game.save.state.settings.lang;
+      select.addEventListener('change',()=>game.updateLanguage(select.value));
+      langLabel.append(select);
+      group.append(langLabel);
+
+      const musicLabel = document.createElement('label');
+      musicLabel.className='switch';
+      musicLabel.textContent = I18n.t('settings.music');
+      const musicInput = document.createElement('input');
+      musicInput.type='range';
+      musicInput.min=0;
+      musicInput.max=1;
+      musicInput.step=0.05;
+      musicInput.value=game.save.state.settings.music;
+      musicInput.className='slider';
+      musicInput.addEventListener('input',()=>game.setMusicVolume(parseFloat(musicInput.value)));
+      musicLabel.append(musicInput);
+      group.append(musicLabel);
+
+      const sfxLabel = document.createElement('label');
+      sfxLabel.className='switch';
+      sfxLabel.textContent = I18n.t('settings.sfx');
+      const sfxInput = document.createElement('input');
+      sfxInput.type='range';
+      sfxInput.min=0;
+      sfxInput.max=1;
+      sfxInput.step=0.05;
+      sfxInput.value=game.save.state.settings.sfx;
+      sfxInput.className='slider';
+      sfxInput.addEventListener('input',()=>game.setFxVolume(parseFloat(sfxInput.value)));
+      sfxLabel.append(sfxInput);
+      group.append(sfxLabel);
+
+      const toggles = [
+        { key:'vibration', label: I18n.t('settings.vibration') },
+        { key:'colorBlind', label: I18n.t('settings.colorblind'), type:'select', options:[['none','Normal'],['protanopia','Protanopia'],['deuteranopia','Deuteranopia'],['tritanopia','Tritanopia']] },
+        { key:'highContrast', label: I18n.t('settings.contrast') },
+        { key:'reduceMotion', label: I18n.t('settings.reduceMotion') }
+      ];
+      toggles.forEach(tog => {
+        if (tog.type === 'select') {
+          const label = document.createElement('label');
+          label.textContent = tog.label;
+          const select = document.createElement('select');
+          tog.options.forEach(opt => {
+            const option = document.createElement('option');
+            option.value=opt[0];
+            option.textContent=opt[1];
+            select.append(option);
+          });
+          select.value = game.save.state.settings[tog.key];
+          select.addEventListener('change',()=>game.updateToggle(tog.key, select.value));
+          label.append(select);
+          group.append(label);
+        } else {
+          const label = document.createElement('label');
+          label.className='switch';
+          label.textContent = tog.label;
+          const input = document.createElement('input');
+          input.type='checkbox';
+          input.checked = !!game.save.state.settings[tog.key];
+          input.addEventListener('change',()=>game.updateToggle(tog.key, input.checked));
+          label.append(input);
+          group.append(label);
+        }
+      });
+
+      const uiScaleLabel = document.createElement('label');
+      uiScaleLabel.textContent = I18n.t('settings.uiScale');
+      const uiSelect = document.createElement('select');
+      uiSelect.innerHTML = `<option value="0.9">Pequeño</option><option value="1">Medio</option><option value="1.2">Grande</option>`;
+      uiSelect.value = game.save.state.settings.uiScale;
+      uiSelect.addEventListener('change',()=>game.updateUiScale(parseFloat(uiSelect.value)));
+      uiScaleLabel.append(uiSelect);
+      group.append(uiScaleLabel);
+
+      const importBtn = document.createElement('button');
+      importBtn.className='btn';
+      importBtn.textContent='Importar JSON';
+      importBtn.addEventListener('click',()=>game.importSave());
+      const exportBtn = document.createElement('button');
+      exportBtn.className='btn secondary';
+      exportBtn.textContent='Exportar JSON';
+      exportBtn.addEventListener('click',()=>game.exportSave());
+
+      const resetBtn = document.createElement('button');
+      resetBtn.className='btn danger';
+      resetBtn.textContent='Reiniciar Progreso';
+      resetBtn.addEventListener('click',()=>{ if (confirm('¿Seguro?')) { game.save.reset(); game.sceneManager.go('home'); } });
+
+      panel.append(group, importBtn, exportBtn, resetBtn);
+      const back = document.createElement('button');
+      back.className='btn ghost';
+      back.textContent='←';
+      back.addEventListener('click',()=>game.sceneManager.go('home'));
+      panel.append(back);
+      this.root.append(panel);
+    }
+    showCredits(game) {
+      this.clear();
+      const panel=document.createElement('div');
+      panel.className='centered-panel';
+      panel.innerHTML = `<div class="scene-title">${I18n.t('ui.credits')}</div><p>Diseño, arte y código: Mega Sort Labs.<br>Audio: SynthWave Co.<br>Agradecimientos a la comunidad.</p>`;
+      const back = document.createElement('button');
+      back.className='btn ghost';
+      back.textContent='←';
+      back.addEventListener('click',()=>game.sceneManager.go('home'));
+      panel.append(back);
+      this.root.append(panel);
+    }
+    showPause(game) {
+      const modal = document.createElement('div');
+      modal.className='modal-bg';
+      modal.innerHTML=`<div class="centered-panel flex-col"><div class="scene-title">${I18n.t('ui.pause')}</div></div>`;
+      const content = modal.querySelector('.centered-panel');
+      const options = [
+        { id: 'resume', label: I18n.t('ui.resume') },
+        { id: 'restart', label: I18n.t('ui.restart') },
+        { id: 'quit', label: I18n.t('ui.quit') }
+      ];
+      options.forEach(opt => {
+        const btn = document.createElement('button');
+        btn.className='btn';
+        btn.textContent=opt.label;
+        btn.addEventListener('click',()=>game.handlePause(opt.id));
+        content.append(btn);
+      });
+      this.root.append(modal);
+    }
+    hidePause() {
+      const modal = this.root.querySelector('.modal-bg');
+      if (modal) modal.remove();
+    }
+    showResults(game, result) {
+      this.clear();
+      const panel = document.createElement('div');
+      panel.className='centered-panel flex-col';
+      const stars = '★'.repeat(result.stars).padEnd(3,'☆');
+      panel.innerHTML = `<div class="scene-title">${I18n.t('ui.results')}</div><div style="font-size:2rem">${stars}</div>
+        <div>${I18n.t('stat.score')}: ${result.score}</div>
+        <div>${I18n.t('stat.accuracy')}: ${(result.accuracy*100).toFixed(0)}%</div>
+        <div>${I18n.t('stat.combo')}: ${result.maxCombo}</div>
+        <div>${I18n.t('stat.time')}: ${result.timeLeft.toFixed(1)}s</div>
+        <div>Monedas: +${result.coins}</div>`;
+      const retry = document.createElement('button');
+      retry.className='btn';
+      retry.textContent='Reintentar';
+      retry.addEventListener('click',()=>game.retryLevel());
+      const next = document.createElement('button');
+      next.className='btn secondary';
+      next.textContent='Siguiente';
+      next.addEventListener('click',()=>game.nextLevel());
+      panel.append(retry, next);
+      const back = document.createElement('button');
+      back.className='btn ghost';
+      back.textContent='Inicio';
+      back.addEventListener('click',()=>game.sceneManager.go('home'));
+      panel.append(back);
+      this.root.append(panel);
+    }
+  }
+
+  class Toasts {
+    constructor(container, audio) {
+      this.container = container;
+      this.audio = audio;
+    }
+    push(message) {
+      const toast = document.createElement('div');
+      toast.className='toast';
+      toast.textContent=message;
+      this.container.append(toast);
+      setTimeout(()=>toast.remove(), 3200);
+    }
+  }
+
+  function generateSpriteAtlas() {
+    const canvas = document.createElement('canvas');
+    canvas.width = 512;
+    canvas.height = 256;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0,0,canvas.width,canvas.height);
+    const frames = {};
+    categories.forEach((cat, idx) => {
+      const x = (idx%6)*80;
+      const y = Math.floor(idx/6)*80;
+      ctx.fillStyle = cat.color;
+      ctx.strokeStyle = '#222';
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.roundRect(x+8,y+8,64,64,16);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = '#111';
+      ctx.font = '32px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(cat.icon, x+40, y+40);
+      frames[cat.id] = { x, y, w: 80, h: 80 };
+    });
+    return { dataURL: canvas.toDataURL('image/png'), frames };
+  }
+
+  function createParallaxLayers() {
+    const back = document.getElementById('parallax-back');
+    const mid = document.getElementById('parallax-mid');
+    const svgBack = `<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600"><rect width="800" height="600" fill="#b8c6ff"/><g fill="rgba(255,255,255,0.35)"><rect x="50" y="80" width="120" height="320" rx="22"/><rect x="250" y="140" width="110" height="260" rx="18"/><rect x="420" y="100" width="160" height="340" rx="26"/></g></svg>`;
+    const svgMid = `<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600"><rect width="800" height="600" fill="rgba(255,255,255,0)"/><g stroke="#8899ff" stroke-width="6" stroke-linecap="round"><line x1="40" y1="120" x2="200" y2="120"/><line x1="240" y1="220" x2="460" y2="220"/><line x1="520" y1="180" x2="760" y2="180"/></g></svg>`;
+    back.style.backgroundImage = `url('data:image/svg+xml;base64,${btoa(svgBack)}')`;
+    mid.style.backgroundImage = `url('data:image/svg+xml;base64,${btoa(svgMid)}')`;
+  }
+
+  class Game {
+    constructor() {
+      this.canvas = document.getElementById('game-canvas');
+      this.ctx = this.canvas.getContext('2d');
+      this.uiRoot = document.getElementById('ui-layer');
+      this.toasts = new Toasts(document.getElementById('toast-container'));
+      this.save = new Save();
+      I18n.setLang(this.save.state.settings.lang);
+      this.audio = new AudioManager(this.save);
+      this.ui = new UIManager(this.uiRoot);
+      this.sceneManager = new SceneManager(this);
+      this.particles = new ParticleSystem();
+      this.input = new Input(this.canvas);
+      this.director = new AILevelDirector(parseInt(this.save.state.seeds['global']||Date.now()), this.save, this.save.state.settings);
+      this.spawner = new Spawner(this.director);
+      this.conveyor = new Conveyor();
+      this.items = [];
+      this.bins = categories.map((cat, idx)=>{ const bin = new Bin(cat); return bin; });
+      this.powerInventory = [];
+      this.activePower = null;
+      this.combo = 0;
+      this.comboTimer = 0;
+      this.comboMultiplier = 1;
+      this.score = 0;
+      this.errors = 0;
+      this.hits = 0;
+      this.timeLeft = 60;
+      this.currentLevel = 1;
+      this.mode = 'level';
+      this.seed = Date.now();
+      this.paused = false;
+      this.tutorialStep = 0;
+      this.recentHoverBin = null;
+      this.spriteAtlas = generateSpriteAtlas();
+      this.setupScenes();
+      this.resize();
+      window.addEventListener('resize', ()=>this.resize());
+      this.lastFrame = performance.now();
+      requestAnimationFrame(this.loop.bind(this));
+      this.input.onDown = (p)=>this.handlePointerDown(p);
+      this.input.onMove = (p)=>this.handlePointerMove(p);
+      this.input.onUp = (p)=>this.handlePointerUp(p);
+      this.debug = { overlay: null, visible: false };
+      window.addEventListener('keydown', (ev)=>{
+        if (ev.key === '`') this.toggleDebug();
+      });
+      this.setupParallax();
+      this.initGame();
+    }
+    initGame() {
+      this.ui.showSplash(()=>{
+        this.sceneManager.go('home');
+      });
+    }
+    setupParallax() {
+      createParallaxLayers();
+    }
+    resize() {
+      const ratio = 16/9;
+      const width = window.innerWidth;
+      const height = window.innerHeight;
+      let canvasWidth = width;
+      let canvasHeight = Math.round(width/ratio);
+      if (canvasHeight > height) {
+        canvasHeight = height;
+        canvasWidth = Math.round(height*ratio);
+      }
+      this.canvas.style.width = `${canvasWidth}px`;
+      this.canvas.style.height = `${canvasHeight}px`;
+    }
+    setupScenes() {
+      this.sceneManager.add('home', {
+        enter: ()=>{ this.audio.playMusic(); this.ui.showHome(this); this.ui.setHidden(false); this.mode='menu'; },
+        exit: ()=>{}
+      });
+      this.sceneManager.add('levels', {
+        enter: ()=>{ this.ui.showLevels(this); },
+        exit: ()=>{}
+      });
+      this.sceneManager.add('infinite', {
+        enter: ()=>{ this.ui.showInfinite(this); },
+        exit: ()=>{}
+      });
+      this.sceneManager.add('store', {
+        enter: ()=>{ this.ui.showStore(this); },
+        exit: ()=>{}
+      });
+      this.sceneManager.add('achievements', {
+        enter: ()=>{ this.ui.showAchievements(this); },
+        exit: ()=>{}
+      });
+      this.sceneManager.add('settings', {
+        enter: ()=>{ this.ui.showSettings(this); this.applySettings(); },
+        exit: ()=>{}
+      });
+      this.sceneManager.add('credits', {
+        enter: ()=>{ this.ui.showCredits(this); },
+        exit: ()=>{}
+      });
+      this.sceneManager.add('play', {
+        enter: ()=>{ this.startRun(); },
+        exit: ()=>{}
+      });
+      this.sceneManager.add('results', {
+        enter: (data)=>{ this.ui.showResults(this, data); },
+        exit: ()=>{}
+      });
+    }
+    applySettings() {
+      const settings = this.save.state.settings;
+      document.body.classList.toggle('high-contrast', !!settings.highContrast);
+      document.documentElement.style.setProperty('--ui-scale', settings.uiScale);
+      this.audio.setMusicVolume(settings.music);
+      this.audio.setFxVolume(settings.sfx);
+      document.getElementById('parallax-back').style.opacity = settings.reduceMotion ? '0' : '0.3';
+      document.getElementById('parallax-mid').style.opacity = settings.reduceMotion ? '0' : '0.4';
+    }
+    updateLanguage(lang) {
+      this.save.state.settings.lang = lang;
+      I18n.setLang(lang);
+      this.save.save();
+      this.sceneManager.go('home');
+    }
+    updateToggle(key, value) {
+      this.save.state.settings[key] = value;
+      this.save.save();
+      this.applySettings();
+    }
+    updateUiScale(scale) {
+      this.save.state.settings.uiScale = scale;
+      this.save.save();
+      this.applySettings();
+      this.sceneManager.go('settings');
+    }
+    setMusicVolume(v) {
+      this.save.state.settings.music = v;
+      this.save.save();
+      this.audio.setMusicVolume(v);
+    }
+    setFxVolume(v) {
+      this.save.state.settings.sfx = v;
+      this.save.save();
+      this.audio.setFxVolume(v);
+    }
+    importSave() {
+      const json = prompt('Pega el JSON de guardado');
+      if (json && this.save.import(json)) {
+        this.toasts.push('Guardado importado');
+        this.applySettings();
+        this.sceneManager.go('home');
+      }
+    }
+    exportSave() {
+      const data = this.save.export();
+      navigator.clipboard?.writeText(data);
+      this.toasts.push('Guardado copiado al portapapeles');
+    }
+    handleMainMenu(action) {
+      switch (action) {
+        case 'tutorial': this.startTutorial(); break;
+        case 'levels': this.sceneManager.go('levels'); break;
+        case 'infinite': this.sceneManager.go('infinite'); break;
+        case 'store': this.sceneManager.go('store'); break;
+        case 'achievements': this.sceneManager.go('achievements'); break;
+        case 'settings': this.sceneManager.go('settings'); break;
+        case 'credits': this.sceneManager.go('credits'); break;
+      }
+    }
+    startTutorial() {
+      this.mode = 'tutorial';
+      this.currentLevel = 0;
+      this.sceneManager.go('play');
+    }
+    startLevel(level) {
+      this.mode = 'level';
+      this.currentLevel = level;
+      this.sceneManager.go('play');
+    }
+    startInfinite() {
+      this.mode = 'infinite';
+      this.currentLevel = 1;
+      this.sceneManager.go('play');
+    }
+    handleStore(item) {
+      const type = item.type;
+      const skinId = item.id.split('_')[1];
+      const inventory = this.save.state.inventory;
+      const owned = inventory.skins[type]?.includes(skinId);
+      if (owned) {
+        inventory.equipped[type] = skinId;
+        this.toasts.push('Equipado!');
+      } else if (inventory.coins >= item.price) {
+        inventory.coins -= item.price;
+        inventory.skins[type] = inventory.skins[type] || [];
+        inventory.skins[type].push(skinId);
+        inventory.equipped[type] = skinId;
+        this.toasts.push('Comprado!');
+      } else {
+        this.toasts.push('Monedas insuficientes');
+      }
+      this.save.save();
+      this.sceneManager.go('store');
+    }
+    startRun() {
+      this.ui.clear();
+      this.ui.setHidden(true);
+      this.applySettings();
+      this.audio.playMusic();
+      this.items = [];
+      this.powerInventory = [];
+      this.activePower = null;
+      this.combo = 0;
+      this.comboMultiplier = 1;
+      this.score = 0;
+      this.errors = 0;
+      this.hits = 0;
+      this.timeLeft = this.mode==='infinite'?999:60;
+      this.seed = Date.now();
+      const skill = this.director.skillRating;
+      const wave = this.director.nextWave({ level: this.currentLevel, mode: this.mode==='infinite'?'infinite':'level', skillRating: skill, screen: { w: this.canvas.width, h: this.canvas.height } });
+      this.spawner.start(wave);
+      this.conveyor.speed = wave.beltSpeed;
+      const width = this.canvas.width;
+      const spacing = width / (this.bins.length + 1);
+      this.bins.forEach((bin, idx)=>{
+        bin.x = spacing*(idx+1);
+        bin.y = this.canvas.height - 140;
+        bin.popTimer = 0;
+      });
+      if (this.mode==='tutorial') {
+        this.timeLeft = 999;
+        this.tutorialStep = 0;
+        this.toasts.push('Arrastra el objeto al contenedor correcto');
+      }
+    }
+    handlePause(action) {
+      switch(action) {
+        case 'resume': this.paused = false; this.ui.hidePause(); break;
+        case 'restart': this.paused=false; this.sceneManager.go('play'); break;
+        case 'quit': this.paused=false; this.sceneManager.go('home'); break;
+      }
+    }
+    handlePointerDown(p) {
+      if (this.sceneManager.currentId !== 'play' || this.paused) return;
+      for (let i=this.items.length-1;i>=0;i--) {
+        const item = this.items[i];
+        if (p.x > item.x-item.width/2 && p.x < item.x+item.width/2 && p.y > item.y-item.height/2 && p.y < item.y+item.height/2) {
+          item.dragging = true;
+          item.offsetX = p.x - item.x;
+          item.offsetY = p.y - item.y;
+          break;
+        }
+      }
+    }
+    handlePointerMove(p) {
+      if (this.sceneManager.currentId !== 'play') return;
+      for (const item of this.items) {
+        if (item.dragging) {
+          item.x = p.x - item.offsetX;
+          item.y = p.y - item.offsetY;
+          if (this.activePower && this.activePower.type==='magnet' && this.activePower.active) {
+            const targetBin = this.bins.find(b=>b.cfg.id===item.data.category);
+            if (targetBin) {
+              item.x = lerp(item.x, targetBin.x, 0.2);
+              item.y = lerp(item.y, targetBin.y-60, 0.2);
+            }
+          }
+        }
+      }
+    }
+    handlePointerUp(p) {
+      if (this.sceneManager.currentId !== 'play' || this.paused) return;
+      for (const item of this.items) {
+        if (item.dragging) {
+          item.dragging = false;
+          if (p.flick) {
+            item.vx = p.vx;
+            item.vy = p.vy;
+          }
+          if (!item.opened) {
+            item.opened = true;
+            this.toasts.push('¡Caja abierta!');
+            return;
+          }
+          if (!item.cleaned) {
+            item.cleaned = true;
+            this.toasts.push('¡Objeto limpio!');
+            return;
+          }
+          const bin = this.bins.find(b=>b.contains(item));
+          if (bin) {
+            this.resolveDrop(item, bin);
+          } else {
+            this.failDrop(item);
+          }
+        }
+      }
+    }
+    resolveDrop(item, bin) {
+      if (bin.cfg.id === item.data.category) {
+        this.score += 100 + this.combo*10;
+        this.hits++;
+        this.combo++;
+        this.comboTimer = 0;
+        this.comboMultiplier = 1 + Math.floor(this.combo/5);
+        this.particles.spawn('ok', bin.x, bin.y-40, bin.cfg.color);
+        this.audio.playSfx('ok');
+        this.items.splice(this.items.indexOf(item),1);
+        if (navigator.vibrate && this.save.state.settings.vibration) navigator.vibrate(15);
+        bin.popTimer = 400;
+        if (this.combo > 0 && this.combo % 10 === 0) {
+          this.grantPower();
+          this.toasts.push('Power-up listo!');
+        }
+      } else {
+        this.failDrop(item);
+      }
+    }
+    failDrop(item) {
+      this.errors++;
+      this.combo = 0;
+      this.comboMultiplier = 1;
+      this.score = Math.max(0, this.score - 150);
+      this.audio.playSfx('error');
+      this.particles.spawn('error', item.x, item.y, '#ff3b3b');
+      if (navigator.vibrate && this.save.state.settings.vibration) navigator.vibrate([40,60,40]);
+      item.x = 40 + Math.random()*80;
+      item.y = this.canvas.height - 220;
+    }
+    grantPower() {
+      const freeSlot = this.powerInventory.length < 3;
+      if (!freeSlot) return;
+      const type = ['freeze','magnet','sweep'][Math.floor(Math.random()*3)];
+      this.powerInventory.push(new PowerUp(type));
+    }
+    activatePower(index) {
+      const power = this.powerInventory[index];
+      if (!power) return;
+      this.activePower = power;
+      power.trigger(powerUps[power.type].duration || 2000);
+      if (power.type==='freeze') {
+        this.conveyor.speed *= 0.2;
+        setTimeout(()=>{ this.conveyor.speed *= 5; }, powerUps.freeze.duration);
+      }
+      if (power.type==='sweep') {
+        let count = 0;
+        const interval = setInterval(()=>{
+          if (this.items.length === 0 || count>=3) { clearInterval(interval); return; }
+          const item = this.items[0];
+          const target = this.bins.find(b=>b.cfg.id===item.data.category);
+          if (target) {
+            item.x = target.x;
+            item.y = target.y-40;
+            this.resolveDrop(item, target);
+          }
+          count++;
+        }, 300);
+      }
+      this.powerInventory.splice(index,1);
+      this.audio.playSfx('powerup');
+    }
+    togglePause() {
+      if (this.paused) {
+        this.paused = false;
+        this.ui.hidePause();
+      } else {
+        this.paused = true;
+        this.ui.showPause(this);
+      }
+    }
+    updateGame(dt) {
+      if (this.paused) return;
+      this.comboTimer += dt;
+      if (this.comboTimer > 1200) {
+        this.combo = 0;
+        this.comboMultiplier = 1;
+      }
+      if (this.mode !== 'tutorial') {
+        this.timeLeft -= dt/1000;
+        if (this.timeLeft <= 0) {
+          this.finishRun();
+          return;
+        }
+      }
+      this.conveyor.update(dt);
+      this.spawner.update(dt, (data)=>this.spawnItem(data));
+      for (const item of this.items) {
+        if (!item.dragging) {
+          item.x -= this.conveyor.speed * dt/1000;
+        }
+      }
+      this.items = this.items.filter(item=>item.x > -100);
+      if (this.activePower) {
+        this.activePower.update(dt);
+        if (!this.activePower.active) this.activePower = null;
+      }
+      this.particles.update(dt);
+      if (this.mode==='tutorial') this.updateTutorial(dt);
+      if (this.mode==='infinite') {
+        this.score += dt * 0.5;
+      }
+    }
+    spawnItem(data) {
+      const sprite = categories.find(c=>c.id===data.category) || categories[0];
+      const item = new Item(data, sprite);
+      item.x = this.canvas.width + 60;
+      item.y = this.canvas.height - 220;
+      item.vx = this.conveyor.speed;
+      item.vy = 0;
+      this.items.push(item);
+    }
+    updateTutorial(dt) {
+      if (this.tutorialStep === 0 && this.hits >= 1) {
+        this.tutorialStep = 1;
+        this.toasts.push('¡Genial! Toca el power-up para usarlo');
+      }
+      if (this.tutorialStep === 1 && this.powerInventory.length>0) {
+        this.activatePower(0);
+        this.tutorialStep = 2;
+        this.toasts.push('¡Tutorial completado!');
+      }
+    }
+    finishRun() {
+      const accuracy = this.hits + this.errors ? this.hits / (this.hits + this.errors) : 1;
+      const stars = accuracy >= 0.9 && this.score > 1200 ? 3 : accuracy >= 0.75 ? 2 : this.errors < 5 ? 1 : 0;
+      const coins = Math.floor(this.score/10 + this.comboMultiplier*15);
+      this.save.state.inventory.coins += coins;
+      if (this.mode==='level') {
+        this.save.state.progress.levels[this.currentLevel] = { stars, score: this.score };
+      }
+      if (this.mode==='infinite') {
+        const inf = this.save.state.infinite;
+        inf.bestScore = Math.max(inf.bestScore, Math.floor(this.score));
+        inf.maxCombo = Math.max(inf.maxCombo, this.combo);
+        inf.maxSpeed = Math.max(inf.maxSpeed, this.conveyor.speed/100);
+      }
+      this.save.save();
+      this.director.adjustAfterOutcome({ accuracy, pace: clamp(this.timeLeft/60,0,1), errors: this.errors });
+      this.sceneManager.go('results', { stars, score: Math.floor(this.score), accuracy, maxCombo: this.combo, timeLeft: Math.max(0,this.timeLeft), coins });
+    }
+    retryLevel() {
+      this.sceneManager.go('play');
+    }
+    nextLevel() {
+      if (this.mode==='level') {
+        this.currentLevel = Math.min(100, this.currentLevel+1);
+        this.sceneManager.go('play');
+      } else {
+        this.sceneManager.go('home');
+      }
+    }
+    toggleDebug() {
+      if (!this.debug.overlay) {
+        const overlay = document.createElement('div');
+        overlay.style.position='absolute';
+        overlay.style.top='1rem';
+        overlay.style.right='1rem';
+        overlay.style.background='rgba(0,0,0,0.6)';
+        overlay.style.color='white';
+        overlay.style.padding='1rem';
+        overlay.style.borderRadius='12px';
+        overlay.style.fontSize='0.9rem';
+        overlay.style.pointerEvents='auto';
+        overlay.innerHTML = `<div>FPS: <span data-fps>0</span></div>
+          <div>Seed: <span data-seed>${this.seed}</span></div>
+          <div>Skill: <span data-skill>${this.director.skillRating}</span></div>
+          <label>Velocidad cinta <input type="range" min="80" max="400" value="${this.conveyor.speed}" data-speed></label>
+          <button data-reroll class="btn secondary" style="margin-top:0.5rem">Re-roll seed</button>`;
+        overlay.querySelector('[data-speed]').addEventListener('input', (ev)=>{
+          this.conveyor.speed = parseFloat(ev.target.value);
+        });
+        overlay.querySelector('[data-reroll]').addEventListener('click', ()=>{
+          this.director = new AILevelDirector(Math.floor(Math.random()*99999999), this.save, this.save.state.settings);
+          this.sceneManager.go('play');
+        });
+        this.uiRoot.append(overlay);
+        this.debug.overlay = overlay;
+      }
+      this.debug.visible = !this.debug.visible;
+      this.debug.overlay.style.display = this.debug.visible ? 'block' : 'none';
+    }
+    loop(now) {
+      const dt = now - this.lastFrame;
+      this.lastFrame = now;
+      this.sceneManager.update(dt);
+      if (this.sceneManager.currentId === 'play') {
+        this.updateGame(dt);
+      }
+      this.render();
+      if (this.debug.visible && this.debug.overlay) {
+        this.debug.overlay.querySelector('[data-fps]').textContent = (1000/dt).toFixed(0);
+        this.debug.overlay.querySelector('[data-seed]').textContent = `${this.seed}`;
+        this.debug.overlay.querySelector('[data-skill]').textContent = `${this.director.skillRating.toFixed(0)}`;
+      }
+      requestAnimationFrame(this.loop.bind(this));
+    }
+    render() {
+      const ctx = this.ctx;
+      ctx.clearRect(0,0,this.canvas.width,this.canvas.height);
+      ctx.fillStyle = '#e9efff';
+      ctx.fillRect(0,0,this.canvas.width,this.canvas.height);
+      ctx.fillStyle = '#d0d8f7';
+      ctx.fillRect(0,this.canvas.height-200,this.canvas.width,200);
+      ctx.fillStyle = '#bcc4e6';
+      ctx.fillRect(0,this.canvas.height-160,this.canvas.width,160);
+      ctx.fillStyle = '#6a7bd5';
+      ctx.fillRect(0,this.canvas.height-120,this.canvas.width,60);
+      ctx.save();
+      ctx.globalAlpha = 0.2;
+      ctx.fillStyle = '#ffffff';
+      for (let i=0;i<10;i++) {
+        ctx.fillRect((i*140 + (Date.now()/10)%140)-140,this.canvas.height-150,60,40);
+      }
+      ctx.restore();
+      for (const bin of this.bins) {
+        bin.render(ctx);
+      }
+      for (const item of this.items) {
+        item.render(ctx);
+      }
+      this.particles.render(ctx);
+      this.renderHud();
+    }
+    renderHud() {
+      let hud = document.getElementById('hud');
+      if (!hud) {
+        hud = document.createElement('div');
+        hud.id='hud';
+        hud.className='hud';
+        this.uiRoot.append(hud);
+      }
+      hud.innerHTML = '';
+      const scorePanel = document.createElement('div');
+      scorePanel.className='hud-panel';
+      scorePanel.innerHTML = `<strong>${I18n.t('stat.score')}</strong> <span>${Math.floor(this.score)}</span>`;
+      const comboPanel = document.createElement('div');
+      comboPanel.className='hud-panel';
+      comboPanel.innerHTML = `<strong>${I18n.t('stat.combo')}</strong> <span>x${this.comboMultiplier}</span>`;
+      if (this.comboMultiplier>1) comboPanel.dataset.pop='true';
+      const timePanel = document.createElement('div');
+      timePanel.className='hud-panel';
+      timePanel.innerHTML = `<strong>${I18n.t('stat.time')}</strong> <span>${this.timeLeft.toFixed(1)}</span>`;
+      const pauseBtn = document.createElement('button');
+      pauseBtn.className='btn ghost';
+      pauseBtn.textContent='II';
+      pauseBtn.addEventListener('click',()=>this.togglePause());
+      pauseBtn.setAttribute('aria-label','Pausa');
+      hud.append(scorePanel, comboPanel, timePanel, pauseBtn);
+      const powerRow = document.createElement('div');
+      powerRow.style.display='flex';
+      powerRow.style.gap='0.6rem';
+      this.powerInventory.forEach((power, idx)=>{
+        const btn = document.createElement('button');
+        btn.className='btn secondary';
+        btn.style.padding='0.6rem';
+        btn.textContent = powerUps[power.type].icon;
+        btn.addEventListener('click',()=>this.activatePower(idx));
+        powerRow.append(btn);
+      });
+      hud.append(powerRow);
+    }
+  }
+
+  window.addEventListener('load', ()=>{
+    new Game();
+  });
+
+  // Tests ligeros
+  console.assert(Math.abs(new SeededRandom(123).next() - 0.17893782751075923) < 1e-6, 'PRNG determinista');
+  const dir = new AILevelDirector(999, { state: defaultSave() }, {});
+  const plan = dir.composeWavePlan({ level: 5, mode: 'level', skillRating: 1200, screen: { w: 1280, h: 720 } });
+  console.assert(plan.spawns.length > 5, 'Plan genera ítems');
+})();
+</script>
+</body>
+</html>
