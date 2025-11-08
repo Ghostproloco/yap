@@ -13,6 +13,14 @@
     { id: 'office', color: '#b3ff82', icon: '📎', label: { es: 'Oficina', en: 'Office' } }
   ];
 
+  const dailyChallengeDefinitions = [
+    { id: 'perfect5', reward: 120, title: { es: 'Logra 5 aciertos seguidos', en: 'Hit 5 items in a row' } },
+    { id: 'combo3', reward: 150, title: { es: 'Consigue combo x3', en: 'Reach x3 combo' } },
+    { id: 'cleanTeam', reward: 180, title: { es: 'Limpia 3 objetos sucios', en: 'Clean 3 dirty items' } },
+    { id: 'powerTrip', reward: 140, title: { es: 'Activa 2 power-ups', en: 'Trigger 2 power-ups' } },
+    { id: 'zenMaster', reward: 200, title: { es: 'Completa un nivel sin errores', en: 'Finish a level without errors' } }
+  ];
+
   const powerUps = {
     freeze: { icon: '❄️', duration: 3000 },
     magnet: { icon: '🧲', duration: 2000 },
@@ -217,6 +225,18 @@
         this.currentMusic = null;
       }
     }
+    suspend() {
+      if (this.ctx && this.ctx.state === 'running') {
+        this.ctx.suspend();
+      }
+    }
+    resume() {
+      if (this.ctx) {
+        if (this.ctx.state === 'suspended') {
+          this.ctx.resume();
+        }
+      }
+    }
     playSfx(type) {
       this.ensureContext();
       if (!this.ctx) return;
@@ -325,10 +345,14 @@
       this.onDown = null;
       this.onMove = null;
       this.onUp = null;
+      this.onKeyDown = null;
       this.flickThreshold = 0.55;
       canvas.addEventListener('pointerdown', this.handleDown.bind(this));
       window.addEventListener('pointermove', this.handleMove.bind(this));
       window.addEventListener('pointerup', this.handleUp.bind(this));
+      window.addEventListener('keydown', (ev)=>{
+        if (this.onKeyDown) this.onKeyDown(ev);
+      });
     }
     normalize(ev) {
       const rect = this.canvas.getBoundingClientRect();
@@ -626,34 +650,109 @@
     showHome(game) {
       this.clear();
       this.setHidden(false);
+      game.ensureDailyChallenges();
       const panel = document.createElement('div');
-      panel.className = 'centered-panel flex-col';
+      panel.className = 'centered-panel wide';
+
+      const grid = document.createElement('div');
+      grid.className = 'home-grid';
+
+      const actionsCard = document.createElement('section');
+      actionsCard.className = 'home-card home-actions';
       const logo = document.createElement('div');
-      logo.className = 'scene-title';
-      logo.innerHTML = `<span style="font-size:3rem">🧠</span><span>Mega Sort Mania</span>`;
-      panel.append(logo);
+      logo.className = 'scene-title hero-title';
+      logo.innerHTML = `<span class="hero-icon">🧠</span><span>Mega Sort Mania</span>`;
+      const blurb = document.createElement('p');
+      blurb.className = 'home-hero';
+      blurb.textContent = I18n.lang === 'es'
+        ? 'Arrastra, combina y desbloquea poderes para dominar la cinta transportadora definitiva.'
+        : 'Drag, chain and unleash power-ups to rule the ultimate conveyor challenge.';
+      actionsCard.append(logo, blurb);
+      const buttonList = document.createElement('div');
+      buttonList.className = 'home-actions-buttons';
       const buttons = [
-        { id: 'tutorial', label: I18n.t('ui.tutorial') },
-        { id: 'levels', label: I18n.t('ui.levels') },
-        { id: 'infinite', label: I18n.t('ui.infinite') },
-        { id: 'store', label: I18n.t('ui.store') },
-        { id: 'achievements', label: I18n.t('ui.achievements') },
-        { id: 'settings', label: I18n.t('ui.settings') },
-        { id: 'credits', label: I18n.t('ui.credits') }
+        { id: 'tutorial', label: I18n.t('ui.tutorial'), icon: '🎓' },
+        { id: 'levels', label: I18n.t('ui.levels'), icon: '🗺️' },
+        { id: 'infinite', label: I18n.t('ui.infinite'), icon: '♾️' },
+        { id: 'store', label: I18n.t('ui.store'), icon: '🛍️' },
+        { id: 'achievements', label: I18n.t('ui.achievements'), icon: '🏆' },
+        { id: 'settings', label: I18n.t('ui.settings'), icon: '⚙️' },
+        { id: 'credits', label: I18n.t('ui.credits'), icon: '📜' }
       ];
       buttons.forEach(btn => {
         const el = document.createElement('button');
         el.className = 'btn';
-        el.textContent = btn.label;
+        el.innerHTML = `<span>${btn.icon}</span><span>${btn.label}</span>`;
         el.addEventListener('click', () => game.handleMainMenu(btn.id));
-        panel.append(el);
+        buttonList.append(el);
       });
+      actionsCard.append(buttonList);
+
+      const infoCard = document.createElement('section');
+      infoCard.className = 'home-card home-info';
+      const summaryTitle = I18n.lang === 'es' ? 'Resumen' : 'Overview';
+      const infoLabels = I18n.lang === 'es'
+        ? { levels: 'Niveles completados', stars: 'Estrellas', coins: 'Monedas', achievements: 'Logros' }
+        : { levels: 'Levels cleared', stars: 'Stars', coins: 'Coins', achievements: 'Achievements' };
+      const statsTitle = document.createElement('h3');
+      statsTitle.textContent = summaryTitle;
+      const stats = document.createElement('div');
+      stats.className = 'home-stats';
+      const progressLevels = Object.keys(game.save.state.progress.levels || {}).length;
+      const starsEarned = Object.values(game.save.state.progress.levels || {}).reduce((sum, lvl)=>sum + (lvl.stars||0), 0);
+      const achievementsUnlocked = Object.keys(game.save.state.achievements || {}).filter(k=>game.save.state.achievements[k]).length;
+      const statData = [
+        { label: infoLabels.levels, value: `${progressLevels}/100` },
+        { label: infoLabels.stars, value: `${starsEarned}` },
+        { label: infoLabels.coins, value: `${game.save.state.inventory.coins}` },
+        { label: infoLabels.achievements, value: `${achievementsUnlocked}` }
+      ];
+      statData.forEach(stat => {
+        const item = document.createElement('div');
+        item.className = 'home-stat';
+        item.innerHTML = `<strong>${stat.value}</strong><span>${stat.label}</span>`;
+        stats.append(item);
+      });
+      infoCard.append(statsTitle, stats);
+
+      const infinite = game.save.state.infinite;
+      const infiniteBox = document.createElement('div');
+      infiniteBox.className = 'home-card-subsection';
+      infiniteBox.innerHTML = `<h3>${I18n.t('ui.infinite')}</h3>
+        <p>${I18n.t('stat.score')}: ${infinite.bestScore.toLocaleString()}</p>
+        <p>${I18n.t('stat.combo')}: ${infinite.maxCombo}</p>
+        <p>Top Speed: ${infinite.maxSpeed.toFixed(1)}</p>`;
+      infoCard.append(infiniteBox);
+
+      const dailyBox = document.createElement('div');
+      dailyBox.className = 'home-card-subsection';
+      const dailyHeader = document.createElement('div');
+      dailyHeader.className = 'daily-header';
+      dailyHeader.innerHTML = `<h3>${I18n.t('daily.challenges')}</h3><span>${I18n.t('daily.resetIn')}: ${game.getDailyResetCountdown()}</span>`;
+      const dailyList = document.createElement('ul');
+      dailyList.className = 'daily-list';
+      (game.save.state.daily.challenges || []).forEach(challenge => {
+        const def = dailyChallengeDefinitions.find(d=>d.id===challenge.id);
+        const title = def ? def.title[I18n.lang] : challenge.id;
+        const rewardText = def ? `${(challenge.reward ?? def.reward)}💰` : '';
+        const status = challenge.done ? '✅' : rewardText || '⬜️';
+        const li = document.createElement('li');
+        li.innerHTML = `<span>${title}</span><span>${status}</span>`;
+        dailyList.append(li);
+      });
+      dailyBox.append(dailyHeader, dailyList);
+      infoCard.append(dailyBox);
+
+      grid.append(actionsCard, infoCard);
+      panel.append(grid);
+
       const news = document.createElement('div');
       news.className = 'news-ticker';
       const span = document.createElement('span');
-      span.textContent = 'Noticias: ¡Nuevos guantes neon disponibles! | Torneo semanal comienza mañana | Ajusta el tamaño de UI en Ajustes';
+      span.textContent = 'Noticias: ¡Nuevos guantes neón disponibles! | Torneo semanal comienza mañana | Ajusta el tamaño de UI en Ajustes';
       news.append(span);
       panel.append(news);
+
       this.root.append(panel);
     }
     showLevels(game) {
@@ -895,26 +994,94 @@
       this.root.append(panel);
     }
     showPause(game) {
+      this.hidePause();
       const modal = document.createElement('div');
-      modal.className='modal-bg';
-      modal.innerHTML=`<div class="centered-panel flex-col"><div class="scene-title">${I18n.t('ui.pause')}</div></div>`;
-      const content = modal.querySelector('.centered-panel');
+      modal.className='modal-bg pause-modal';
+      const panel = document.createElement('div');
+      panel.className='centered-panel flex-col';
+      const title = document.createElement('div');
+      title.className='scene-title';
+      title.textContent = I18n.t('ui.pause');
+      panel.append(title);
+
+      const buttonRow = document.createElement('div');
+      buttonRow.className='flex-col';
       const options = [
-        { id: 'resume', label: I18n.t('ui.resume') },
-        { id: 'restart', label: I18n.t('ui.restart') },
-        { id: 'quit', label: I18n.t('ui.quit') }
+        { id: 'resume', label: I18n.t('ui.resume'), cls: 'btn' },
+        { id: 'restart', label: I18n.t('ui.restart'), cls: 'btn secondary' },
+        { id: 'quit', label: I18n.t('ui.quit'), cls: 'btn ghost' }
       ];
       options.forEach(opt => {
         const btn = document.createElement('button');
-        btn.className='btn';
-        btn.textContent=opt.label;
+        btn.className = opt.cls;
+        btn.textContent = opt.label;
         btn.addEventListener('click',()=>game.handlePause(opt.id));
-        content.append(btn);
+        buttonRow.append(btn);
       });
+      panel.append(buttonRow);
+
+      const quick = document.createElement('div');
+      quick.className='pause-quick';
+      const quickTitle = document.createElement('h4');
+      quickTitle.textContent = I18n.lang === 'es' ? 'Ajustes rápidos' : 'Quick settings';
+      quick.append(quickTitle);
+
+      const createSlider = (label, value, min, max, step, onInput) => {
+        const row = document.createElement('label');
+        row.className='slider-row';
+        const spanLabel = document.createElement('span');
+        spanLabel.textContent = label;
+        const wrapper = document.createElement('div');
+        wrapper.className='slider-wrapper';
+        const range = document.createElement('input');
+        range.type='range';
+        range.min=min; range.max=max; range.step=step; range.value=value;
+        const valueLabel = document.createElement('span');
+        valueLabel.className='slider-value';
+        valueLabel.textContent = Math.round(value*100)+'%';
+        range.addEventListener('input',(ev)=>{
+          const v = parseFloat(ev.target.value);
+          valueLabel.textContent = Math.round(v*100)+'%';
+          onInput(v);
+        });
+        wrapper.append(range,valueLabel);
+        row.append(spanLabel, wrapper);
+        quick.append(row);
+      };
+
+      createSlider(I18n.t('settings.music'), game.save.state.settings.music, 0, 1, 0.01, (v)=>game.setMusicVolume(v));
+      createSlider(I18n.t('settings.sfx'), game.save.state.settings.sfx, 0, 1, 0.01, (v)=>game.setFxVolume(v));
+
+      const toggles = [
+        { key: 'reduceMotion', label: I18n.t('settings.reduceMotion') },
+        { key: 'highContrast', label: I18n.t('settings.contrast') },
+        { key: 'vibration', label: I18n.t('settings.vibration') }
+      ];
+      toggles.forEach(t => {
+        const row = document.createElement('label');
+        row.className='toggle-row';
+        const span = document.createElement('span');
+        span.textContent = t.label;
+        const input = document.createElement('input');
+        input.type='checkbox';
+        input.checked = !!game.save.state.settings[t.key];
+        if (t.key === 'vibration' && !('vibrate' in navigator)) {
+          input.disabled = true;
+          input.checked = false;
+        }
+        input.addEventListener('change',()=>game.updateToggle(t.key, input.checked));
+        row.append(span, input);
+        quick.append(row);
+      });
+
+      panel.append(quick);
+      modal.append(panel);
       this.root.append(modal);
+      const firstButton = buttonRow.querySelector('button');
+      setTimeout(()=>firstButton?.focus(), 0);
     }
     hidePause() {
-      const modal = this.root.querySelector('.modal-bg');
+      const modal = this.root.querySelector('.pause-modal');
       if (modal) modal.remove();
     }
     showResults(game, result) {
@@ -1004,6 +1171,7 @@
       this.uiRoot = document.getElementById('ui-layer');
       this.toasts = new Toasts(document.getElementById('toast-container'));
       this.save = new Save();
+      this.ensureDailyChallenges();
       I18n.setLang(this.save.state.settings.lang);
       this.audio = new AudioManager(this.save);
       this.ui = new UIManager(this.uiRoot);
@@ -1028,9 +1196,12 @@
       this.mode = 'level';
       this.seed = Date.now();
       this.paused = false;
+      this.pauseReason = null;
       this.tutorialStep = 0;
       this.recentHoverBin = null;
       this.spriteAtlas = generateSpriteAtlas();
+      this.hudElements = null;
+      this.powerDirty = true;
       this.setupScenes();
       this.resize();
       window.addEventListener('resize', ()=>this.resize());
@@ -1039,6 +1210,12 @@
       this.input.onDown = (p)=>this.handlePointerDown(p);
       this.input.onMove = (p)=>this.handlePointerMove(p);
       this.input.onUp = (p)=>this.handlePointerUp(p);
+      this.input.onKeyDown = (ev)=>{
+        if (this.sceneManager.currentId === 'play' && (ev.key === 'Escape' || ev.key === 'Pause')) {
+          ev.preventDefault();
+          this.togglePause();
+        }
+      };
       this.debug = { overlay: null, visible: false };
       window.addEventListener('keydown', (ev)=>{
         if (ev.key === '`') this.toggleDebug();
@@ -1113,6 +1290,35 @@
       this.audio.setFxVolume(settings.sfx);
       document.getElementById('parallax-back').style.opacity = settings.reduceMotion ? '0' : '0.3';
       document.getElementById('parallax-mid').style.opacity = settings.reduceMotion ? '0' : '0.4';
+    }
+    ensureDailyChallenges() {
+      const daily = this.save.state.daily;
+      const today = new Date();
+      const key = today.toISOString().slice(0,10);
+      if (daily.date === key && Array.isArray(daily.challenges) && daily.challenges.length >= 3) {
+        return;
+      }
+      const rngSeed = parseInt(key.replace(/-/g,''), 10) || Date.now();
+      const rng = new SeededRandom(rngSeed);
+      const pool = dailyChallengeDefinitions.slice();
+      const picks = [];
+      while (picks.length < 3 && pool.length) {
+        const idx = Math.floor(rng.next()*pool.length);
+        const [choice] = pool.splice(idx,1);
+        picks.push({ id: choice.id, reward: choice.reward, done: false });
+      }
+      daily.date = key;
+      daily.challenges = picks;
+      this.save.save();
+    }
+    getDailyResetCountdown() {
+      const now = new Date();
+      const reset = new Date(now);
+      reset.setHours(24, 0, 0, 0);
+      const diff = Math.max(0, reset - now);
+      const hours = Math.floor(diff / 3600000);
+      const minutes = Math.floor((diff % 3600000) / 60000);
+      return `${String(hours).padStart(2,'0')}h ${String(minutes).padStart(2,'0')}m`;
     }
     updateLanguage(lang) {
       this.save.state.settings.lang = lang;
@@ -1204,9 +1410,16 @@
       this.ui.clear();
       this.ui.setHidden(true);
       this.applySettings();
+      this.paused = false;
+      this.pauseReason = null;
+      document.body.classList.remove('is-paused');
+      this.ui.hidePause();
+      this.audio.resume();
       this.audio.playMusic();
       this.items = [];
       this.powerInventory = [];
+      this.powerDirty = true;
+      this.updatePowerRow();
       this.activePower = null;
       this.combo = 0;
       this.comboMultiplier = 1;
@@ -1234,9 +1447,9 @@
     }
     handlePause(action) {
       switch(action) {
-        case 'resume': this.paused = false; this.ui.hidePause(); break;
-        case 'restart': this.paused=false; this.sceneManager.go('play'); break;
-        case 'quit': this.paused=false; this.sceneManager.go('home'); break;
+        case 'resume': this.setPaused(false); break;
+        case 'restart': this.setPaused(false); this.sceneManager.go('play'); break;
+        case 'quit': this.setPaused(false); this.sceneManager.go('home'); break;
       }
     }
     handlePointerDown(p) {
@@ -1331,11 +1544,14 @@
       if (!freeSlot) return;
       const type = ['freeze','magnet','sweep'][Math.floor(Math.random()*3)];
       this.powerInventory.push(new PowerUp(type));
+      this.powerDirty = true;
+      this.updatePowerRow();
     }
     activatePower(index) {
       const power = this.powerInventory[index];
       if (!power) return;
       this.activePower = power;
+      this.powerDirty = true;
       power.trigger(powerUps[power.type].duration || 2000);
       if (power.type==='freeze') {
         this.conveyor.speed *= 0.2;
@@ -1356,16 +1572,43 @@
         }, 300);
       }
       this.powerInventory.splice(index,1);
+      this.powerDirty = true;
       this.audio.playSfx('powerup');
+      this.updatePowerRow();
+    }
+    setPaused(flag, reason='user') {
+      if (this.sceneManager.currentId !== 'play') {
+        if (!flag) {
+          this.paused = false;
+          this.pauseReason = null;
+          document.body.classList.remove('is-paused');
+          this.ui.hidePause();
+        }
+        return;
+      }
+      if (this.paused === flag) {
+        if (!flag) {
+          document.body.classList.remove('is-paused');
+          this.ui.hidePause();
+          this.audio.resume();
+        }
+        return;
+      }
+      this.paused = flag;
+      this.pauseReason = flag ? reason : null;
+      document.body.classList.toggle('is-paused', flag);
+      if (flag) {
+        this.audio.suspend();
+        this.ui.showPause(this);
+      } else {
+        this.ui.hidePause();
+        this.audio.resume();
+        this.lastFrame = performance.now();
+      }
     }
     togglePause() {
-      if (this.paused) {
-        this.paused = false;
-        this.ui.hidePause();
-      } else {
-        this.paused = true;
-        this.ui.showPause(this);
-      }
+      if (this.sceneManager.currentId !== 'play') return;
+      this.setPaused(!this.paused);
     }
     updateGame(dt) {
       if (this.paused) return;
@@ -1391,7 +1634,10 @@
       this.items = this.items.filter(item=>item.x > -100);
       if (this.activePower) {
         this.activePower.update(dt);
-        if (!this.activePower.active) this.activePower = null;
+        if (!this.activePower.active) {
+          this.activePower = null;
+          this.powerDirty = true;
+        }
       }
       this.particles.update(dt);
       if (this.mode==='tutorial') this.updateTutorial(dt);
@@ -1496,21 +1742,7 @@
     render() {
       const ctx = this.ctx;
       ctx.clearRect(0,0,this.canvas.width,this.canvas.height);
-      ctx.fillStyle = '#e9efff';
-      ctx.fillRect(0,0,this.canvas.width,this.canvas.height);
-      ctx.fillStyle = '#d0d8f7';
-      ctx.fillRect(0,this.canvas.height-200,this.canvas.width,200);
-      ctx.fillStyle = '#bcc4e6';
-      ctx.fillRect(0,this.canvas.height-160,this.canvas.width,160);
-      ctx.fillStyle = '#6a7bd5';
-      ctx.fillRect(0,this.canvas.height-120,this.canvas.width,60);
-      ctx.save();
-      ctx.globalAlpha = 0.2;
-      ctx.fillStyle = '#ffffff';
-      for (let i=0;i<10;i++) {
-        ctx.fillRect((i*140 + (Date.now()/10)%140)-140,this.canvas.height-150,60,40);
-      }
-      ctx.restore();
+      this.drawWarehouse(ctx);
       for (const bin of this.bins) {
         bin.render(ctx);
       }
@@ -1520,43 +1752,134 @@
       this.particles.render(ctx);
       this.renderHud();
     }
-    renderHud() {
-      let hud = document.getElementById('hud');
-      if (!hud) {
-        hud = document.createElement('div');
-        hud.id='hud';
-        hud.className='hud';
-        this.uiRoot.append(hud);
+    drawWarehouse(ctx) {
+      const w = this.canvas.width;
+      const h = this.canvas.height;
+      const beltTop = h - 180;
+      const wallGrad = ctx.createLinearGradient(0, 0, 0, h);
+      wallGrad.addColorStop(0, '#f4f6ff');
+      wallGrad.addColorStop(1, '#ccd6ff');
+      ctx.fillStyle = wallGrad;
+      ctx.fillRect(0, 0, w, h);
+      ctx.fillStyle = 'rgba(70,90,160,0.08)';
+      for (let i=0;i<5;i++) {
+        const y = 80 + i*90;
+        ctx.fillRect(60, y, w-120, 8);
       }
-      hud.innerHTML = '';
-      const scorePanel = document.createElement('div');
-      scorePanel.className='hud-panel';
-      scorePanel.innerHTML = `<strong>${I18n.t('stat.score')}</strong> <span>${Math.floor(this.score)}</span>`;
-      const comboPanel = document.createElement('div');
-      comboPanel.className='hud-panel';
-      comboPanel.innerHTML = `<strong>${I18n.t('stat.combo')}</strong> <span>x${this.comboMultiplier}</span>`;
-      if (this.comboMultiplier>1) comboPanel.dataset.pop='true';
-      const timePanel = document.createElement('div');
-      timePanel.className='hud-panel';
-      timePanel.innerHTML = `<strong>${I18n.t('stat.time')}</strong> <span>${this.timeLeft.toFixed(1)}</span>`;
-      const pauseBtn = document.createElement('button');
-      pauseBtn.className='btn ghost';
-      pauseBtn.textContent='II';
-      pauseBtn.addEventListener('click',()=>this.togglePause());
-      pauseBtn.setAttribute('aria-label','Pausa');
-      hud.append(scorePanel, comboPanel, timePanel, pauseBtn);
-      const powerRow = document.createElement('div');
-      powerRow.style.display='flex';
-      powerRow.style.gap='0.6rem';
-      this.powerInventory.forEach((power, idx)=>{
-        const btn = document.createElement('button');
-        btn.className='btn secondary';
-        btn.style.padding='0.6rem';
-        btn.textContent = powerUps[power.type].icon;
-        btn.addEventListener('click',()=>this.activatePower(idx));
-        powerRow.append(btn);
-      });
-      hud.append(powerRow);
+      ctx.fillStyle = '#d8def7';
+      ctx.fillRect(0, beltTop, w, 180);
+      const beltGrad = ctx.createLinearGradient(0, beltTop+40, 0, h);
+      beltGrad.addColorStop(0, '#5464b9');
+      beltGrad.addColorStop(1, '#2f376f');
+      ctx.fillStyle = beltGrad;
+      ctx.fillRect(0, h-120, w, 120);
+      ctx.save();
+      ctx.globalAlpha = 0.2;
+      ctx.fillStyle = '#ffffff';
+      const stride = 140;
+      const offset = (Date.now()/10)%stride;
+      for (let x=-stride; x<w+stride; x+=stride) {
+        ctx.fillRect(x+offset, h-140, 60, 40);
+      }
+      ctx.restore();
+    }
+    renderHud() {
+      if (!this.hudElements) {
+        const hud = document.createElement('div');
+        hud.id = 'hud';
+        hud.className = 'hud';
+
+        const scorePanel = document.createElement('div');
+        scorePanel.className = 'hud-panel';
+        const scoreLabel = document.createElement('strong');
+        const scoreValue = document.createElement('span');
+        scorePanel.append(scoreLabel, scoreValue);
+
+        const comboPanel = document.createElement('div');
+        comboPanel.className = 'hud-panel';
+        const comboLabel = document.createElement('strong');
+        const comboValue = document.createElement('span');
+        comboPanel.append(comboLabel, comboValue);
+
+        const timePanel = document.createElement('div');
+        timePanel.className = 'hud-panel';
+        const timeLabel = document.createElement('strong');
+        const timeValue = document.createElement('span');
+        timePanel.append(timeLabel, timeValue);
+
+        const pauseBtn = document.createElement('button');
+        pauseBtn.className = 'btn ghost icon-only';
+        pauseBtn.innerHTML = '⏸';
+        pauseBtn.addEventListener('click',()=>this.togglePause());
+        pauseBtn.setAttribute('aria-label', I18n.t('ui.pause'));
+
+        const powerRow = document.createElement('div');
+        powerRow.className = 'power-row';
+
+        hud.append(scorePanel, comboPanel, timePanel, pauseBtn);
+        hud.append(powerRow);
+        this.uiRoot.append(hud);
+        this.hudElements = {
+          root: hud,
+          scoreLabel,
+          scoreValue,
+          comboLabel,
+          comboValue,
+          comboPanel,
+          timeLabel,
+          timeValue,
+          powerRow,
+          pauseBtn
+        };
+      }
+      const { root, scoreLabel, scoreValue, comboLabel, comboValue, comboPanel, timeLabel, timeValue } = this.hudElements;
+      const inPlay = this.sceneManager.currentId === 'play';
+      root.classList.toggle('is-hidden', !inPlay);
+      scoreLabel.textContent = I18n.t('stat.score');
+      comboLabel.textContent = I18n.t('stat.combo');
+      timeLabel.textContent = I18n.t('stat.time');
+      this.hudElements.pauseBtn.setAttribute('aria-label', I18n.t('ui.pause'));
+      if (!inPlay) return;
+      const locale = I18n.lang === 'es' ? 'es-ES' : 'en-US';
+      scoreValue.textContent = Math.floor(this.score).toLocaleString(locale);
+      comboValue.textContent = `x${this.comboMultiplier}`;
+      if (this.comboMultiplier > 1) {
+        comboPanel.dataset.pop = 'true';
+      } else {
+        delete comboPanel.dataset.pop;
+      }
+      timeValue.textContent = this.timeLeft.toFixed(1);
+      if (this.powerDirty) {
+        this.updatePowerRow();
+      }
+    }
+    updatePowerRow() {
+      if (!this.hudElements) return;
+      const row = this.hudElements.powerRow;
+      row.innerHTML = '';
+      const hasActive = this.activePower && this.activePower.active;
+      if (this.powerInventory.length === 0 && !hasActive) {
+        const placeholder = document.createElement('span');
+        placeholder.className = 'power-placeholder';
+        placeholder.textContent = I18n.lang === 'es' ? 'Sin power-ups' : 'No power-ups';
+        row.append(placeholder);
+      } else {
+        this.powerInventory.forEach((power, idx)=>{
+          const btn = document.createElement('button');
+          btn.className = 'btn secondary power-chip';
+          btn.innerHTML = `<span>${powerUps[power.type].icon}</span>`;
+          btn.addEventListener('click',()=>this.activatePower(idx));
+          row.append(btn);
+        });
+      }
+      if (hasActive) {
+        const active = document.createElement('div');
+        active.className = 'power-active';
+        const label = I18n.lang === 'es' ? 'Activo' : 'Active';
+        active.innerHTML = `<span>${powerUps[this.activePower.type].icon}</span><span>${label}</span>`;
+        row.append(active);
+      }
+      this.powerDirty = false;
     }
   }
 
